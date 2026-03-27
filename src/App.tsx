@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import VerticalTimeline from './components/VerticalTimeline';
 import {
   BarChart,
   Bar,
@@ -13,6 +14,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from 'recharts';
 import {
   Upload,
@@ -20,7 +22,6 @@ import {
   ClipboardPaste,
   Trophy,
   AlertTriangle,
-  Clock,
   Flag,
   CheckCircle,
   XCircle,
@@ -53,6 +54,7 @@ interface MatchData {
   matchDate?: string;
   refereeName?: string;
   matchLevel?: string;
+  halfTimeMinute?: number;
 }
 
 type EventFilter = {
@@ -61,6 +63,7 @@ type EventFilter = {
   redCards: boolean;
   whiteCards: boolean;
   scores: boolean;
+  team: 'all' | 'home' | 'away';
 };
 
 // Sample data
@@ -127,20 +130,6 @@ const getPeriodIndex = (minutes: number): number => {
   if (minutes < 70) return 6;
   if (minutes < 80) return 7;
   return 8;
-};
-
-// Card styles
-const getCardStyles = (type: string) => {
-  switch (type) {
-    case 'Yellow Card':
-      return { bg: 'bg-yellow-500', text: 'text-yellow-500', label: 'CJ' };
-    case 'Red Card':
-      return { bg: 'bg-red-500', text: 'text-red-500', label: 'CR' };
-    case 'White Card':
-      return { bg: 'bg-white', text: 'text-gray-400', label: 'CB' };
-    default:
-      return { bg: 'bg-gray-500', text: 'text-gray-500', label: '?' };
-  }
 };
 
 // Components
@@ -645,210 +634,6 @@ const CumulativePenaltyChart = ({ data }: { data: MatchData }) => {
   );
 };
 
-// Add missing import for ReferenceLine
-import { ReferenceLine } from 'recharts';
-
-const Timeline = ({ data, filters }: { data: MatchData; filters: EventFilter }) => {
-  const relevantEvents = data.events.filter((e) => {
-    if (e.type === 'Penalty Conceded' && filters.penalties) return true;
-    if (e.type === 'Yellow Card' && filters.yellowCards) return true;
-    if (e.type === 'Red Card' && filters.redCards) return true;
-    if (e.type === 'White Card' && filters.whiteCards) return true;
-    if (['Penalty Kick', 'Penalty Try', 'Try', 'Conversion', 'Drop Goal'].includes(e.type) && filters.scores) return true;
-    return false;
-  }).sort((a, b) => a.time - b.time);
-
-  const maxTime = Math.max(...data.events.filter((e) => e.type === 'Full Time').map((e) => e.time), 4800);
-  const getPosition = (time: number) => (time / maxTime) * 100;
-
-  const homeEvents = relevantEvents.filter((e) => e.team === 'HOME' || (e.type !== 'Half Time' && e.type !== 'Full Time' && !e.team));
-  const awayEvents = relevantEvents.filter((e) => e.team === 'AWAY');
-
-  const getHalfTimeEvent = () => data.events.find((e) => e.type === 'Half Time');
-  const getFullTimeEvent = () => data.events.find((e) => e.type === 'Full Time');
-
-  const halfTimePos = getHalfTimeEvent() ? getPosition(getHalfTimeEvent()!.time) : 50;
-  const fullTimePos = getFullTimeEvent() ? getPosition(getFullTimeEvent()!.time) : 100;
-
-  const getScoreAtTime = (time: number, team: 'HOME' | 'AWAY') => {
-    let score = 0;
-    data.events.forEach((e) => {
-      if (e.time <= time) {
-        if (e.team === team) {
-          if (e.type === 'Penalty Kick' || e.type === 'Penalty Try') score += e.points || 3;
-          if (e.type === 'Try') score += 5;
-          if (e.type === 'Conversion') score += 2;
-          if (e.type === 'Drop Goal') score += 3;
-        }
-      }
-    });
-    return score;
-  };
-
-  const halfTimeScore = {
-    home: getScoreAtTime(getHalfTimeEvent()?.time || 2400, 'HOME'),
-    away: getScoreAtTime(getHalfTimeEvent()?.time || 2400, 'AWAY'),
-  };
-
-  const finalScore = {
-    home: getScoreAtTime(getFullTimeEvent()?.time || maxTime, 'HOME'),
-    away: getScoreAtTime(getFullTimeEvent()?.time || maxTime, 'AWAY'),
-  };
-
-  return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
-      <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-        <Clock className="w-5 h-5 text-blue-400" />
-        Timeline des événements
-      </h3>
-      
-      <div className="relative">
-        {/* Timeline base */}
-        <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-700 rounded-full transform -translate-y-1/2" />
-        
-        {/* Start marker */}
-        <div className="absolute top-1/2 left-0 transform -translate-x-1/2 -translate-y-1/2">
-          <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
-          <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-400 whitespace-nowrap">
-            Début<br />0:00
-          </div>
-        </div>
-
-        {/* Half time marker */}
-        <div 
-          className="absolute top-1/2 transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-          style={{ left: `${halfTimePos}%` }}
-        >
-          <div className="w-4 h-4 bg-yellow-500 rounded-full border-2 border-white group-hover:w-6 group-hover:h-6 transition-all" />
-          <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-center whitespace-nowrap">
-            <div className="text-xs text-yellow-400">Mi-temps</div>
-            <div className="text-xs text-slate-300 font-bold">
-              {halfTimeScore.home} - {halfTimeScore.away}
-            </div>
-          </div>
-        </div>
-
-        {/* Full time marker */}
-        <div 
-          className="absolute top-1/2 transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-          style={{ left: `${Math.min(fullTimePos, 98)}%` }}
-        >
-          <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white group-hover:w-6 group-hover:h-6 transition-all" />
-          <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-center whitespace-nowrap">
-            <div className="text-xs text-red-400">Fin</div>
-            <div className="text-xs text-slate-300 font-bold">
-              {finalScore.home} - {finalScore.away}
-            </div>
-          </div>
-        </div>
-
-        {/* Home events */}
-        <div className="absolute left-0 right-0" style={{ top: '15%' }}>
-          {homeEvents.map((event) => {
-            const pos = getPosition(event.time);
-            const styles = getCardStyles(event.type);
-            return (
-              <div
-                key={event.id}
-                className="absolute transform -translate-x-1/2 group"
-                style={{ left: `${pos}%` }}
-              >
-                <div 
-                  className={`w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-lg transition-transform group-hover:scale-125 ${
-                    event.type === 'Penalty Conceded' ? 'bg-blue-500' : 
-                    event.type.includes('Card') ? styles.bg : 'bg-yellow-500'
-                  }`}
-                >
-                  <span className="text-white text-xs font-bold">
-                    {event.type === 'Penalty Conceded' ? 'P' : 
-                     event.type === 'Yellow Card' ? 'J' :
-                     event.type === 'Red Card' ? 'R' :
-                     event.type === 'White Card' ? 'B' : 'T'}
-                  </span>
-                </div>
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <div className="bg-slate-900 border border-slate-600 rounded-lg p-2 text-xs whitespace-nowrap">
-                    <div className="font-medium text-slate-100">{formatTime(event.time)}</div>
-                    <div className="text-slate-400">{data.homeTeamName}</div>
-                    <div className="text-blue-400">{event.type}</div>
-                    {event.detail && <div className="text-slate-500">{event.detail}</div>}
-                  </div>
-                </div>
-                <div 
-                  className="absolute top-full left-1/2 w-px h-4 bg-slate-500 transform -translate-x-1/2"
-                  style={{ height: '20px' }}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Away events */}
-        <div className="absolute left-0 right-0" style={{ top: '65%' }}>
-          {awayEvents.map((event) => {
-            const pos = getPosition(event.time);
-            const styles = getCardStyles(event.type);
-            return (
-              <div
-                key={event.id}
-                className="absolute transform -translate-x-1/2 group"
-                style={{ left: `${pos}%` }}
-              >
-                <div 
-                  className="absolute top-full w-px bg-slate-500 transform -translate-x-1/2"
-                  style={{ height: '20px' }}
-                />
-                <div 
-                  className={`w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-lg transition-transform group-hover:scale-125 ${
-                    event.type === 'Penalty Conceded' ? 'bg-gray-500' : 
-                    event.type.includes('Card') ? styles.bg : 'bg-yellow-500'
-                  }`}
-                >
-                  <span className="text-white text-xs font-bold">
-                    {event.type === 'Penalty Conceded' ? 'P' : 
-                     event.type === 'Yellow Card' ? 'J' :
-                     event.type === 'Red Card' ? 'R' :
-                     event.type === 'White Card' ? 'B' : 'T'}
-                  </span>
-                </div>
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <div className="bg-slate-900 border border-slate-600 rounded-lg p-2 text-xs whitespace-nowrap">
-                    <div className="font-medium text-slate-100">{formatTime(event.time)}</div>
-                    <div className="text-slate-400">{data.awayTeamName}</div>
-                    <div className="text-gray-400">{event.type}</div>
-                    {event.detail && <div className="text-slate-500">{event.detail}</div>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Team labels */}
-        <div className="absolute left-2 top-8 text-xs font-medium text-blue-400">
-          {data.homeTeamName}
-        </div>
-        <div className="absolute left-2 bottom-8 text-xs font-medium text-slate-400">
-          {data.awayTeamName}
-        </div>
-      </div>
-
-      {/* Time axis */}
-      <div className="mt-16 flex justify-between text-xs text-slate-500 px-4">
-        <span>0</span>
-        <span>10</span>
-        <span>20</span>
-        <span>30</span>
-        <span>40</span>
-        <span>50</span>
-        <span>60</span>
-        <span>70</span>
-        <span>80</span>
-      </div>
-    </div>
-  );
-};
-
 const SeriesAnalysis = ({ data }: { data: MatchData }) => {
   const penalties = data.events.filter((e) => e.type === 'Penalty Conceded');
   const cards = data.events.filter((e) => ['Yellow Card', 'Red Card', 'White Card'].includes(e.type));
@@ -1060,68 +845,114 @@ const FilterPanel = ({
     onFilterChange({ ...filters, [key]: !filters[key] });
   };
 
+  const setTeam = (team: 'all' | 'home' | 'away') => {
+    onFilterChange({ ...filters, team });
+  };
+
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
       <h3 className="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
         <Filter className="w-4 h-4 text-blue-400" />
         Filtres des événements
       </h3>
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={() => toggle('penalties')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-            filters.penalties
-              ? 'bg-blue-500/20 text-blue-400 border border-blue-500'
-              : 'bg-slate-700 text-slate-400 border border-slate-600'
-          }`}
-        >
-          <Flag className="w-4 h-4" />
-          Pénalités
-        </button>
-        <button
-          onClick={() => toggle('yellowCards')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-            filters.yellowCards
-              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500'
-              : 'bg-slate-700 text-slate-400 border border-slate-600'
-          }`}
-        >
-          <div className="w-4 h-4 bg-yellow-500 rounded-sm" />
-          Cartons Jaunes
-        </button>
-        <button
-          onClick={() => toggle('redCards')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-            filters.redCards
-              ? 'bg-red-500/20 text-red-400 border border-red-500'
-              : 'bg-slate-700 text-slate-400 border border-slate-600'
-          }`}
-        >
-          <div className="w-4 h-4 bg-red-500 rounded-sm" />
-          Cartons Rouges
-        </button>
-        <button
-          onClick={() => toggle('whiteCards')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-            filters.whiteCards
-              ? 'bg-white/20 text-white border border-white'
-              : 'bg-slate-700 text-slate-400 border border-slate-600'
-          }`}
-        >
-          <div className="w-4 h-4 bg-white border border-gray-400 rounded-sm" />
-          Cartons Blancs
-        </button>
-        <button
-          onClick={() => toggle('scores')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-            filters.scores
-              ? 'bg-green-500/20 text-green-400 border border-green-500'
-              : 'bg-slate-700 text-slate-400 border border-slate-600'
-          }`}
-        >
-          <Trophy className="w-4 h-4" />
-          Scores
-        </button>
+      
+      {/* Filtre par équipe */}
+      <div className="mb-4">
+        <h4 className="text-xs text-slate-400 mb-2">Équipe</h4>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTeam('all')}
+            className={`flex-1 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.team === 'all'
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            Les 2
+          </button>
+          <button
+            onClick={() => setTeam('home')}
+            className={`flex-1 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.team === 'home'
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            Domicile
+          </button>
+          <button
+            onClick={() => setTeam('away')}
+            className={`flex-1 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.team === 'away'
+                ? 'bg-gray-500/20 text-gray-300 border border-gray-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            Visiteur
+          </button>
+        </div>
+      </div>
+      
+      {/* Filtres par type */}
+      <div>
+        <h4 className="text-xs text-slate-400 mb-2">Type d'événement</h4>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => toggle('penalties')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.penalties
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            <Flag className="w-4 h-4" />
+            Pénalités
+          </button>
+          <button
+            onClick={() => toggle('yellowCards')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.yellowCards
+                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            <div className="w-4 h-4 bg-yellow-500 rounded-sm" />
+            Cartons Jaunes
+          </button>
+          <button
+            onClick={() => toggle('redCards')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.redCards
+                ? 'bg-red-500/20 text-red-400 border border-red-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            <div className="w-4 h-4 bg-red-500 rounded-sm" />
+            Cartons Rouges
+          </button>
+          <button
+            onClick={() => toggle('whiteCards')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.whiteCards
+                ? 'bg-white/20 text-white border border-white'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            <div className="w-4 h-4 bg-white border border-gray-400 rounded-sm" />
+            Cartons Blancs
+          </button>
+          <button
+            onClick={() => toggle('scores')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+              filters.scores
+                ? 'bg-green-500/20 text-green-400 border border-green-500'
+                : 'bg-slate-700 text-slate-400 border border-slate-600'
+            }`}
+          >
+            <Trophy className="w-4 h-4" />
+            Scores
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1136,6 +967,7 @@ export default function App() {
     redCards: true,
     whiteCards: true,
     scores: true,
+    team: 'all',
   });
 
   const handlePrint = () => {
@@ -1342,7 +1174,15 @@ export default function App() {
           {/* Right Column */}
           <div className="space-y-6">
             <FilterPanel filters={filters} onFilterChange={setFilters} />
-            <Timeline data={matchData} filters={filters} />
+            <VerticalTimeline 
+              events={matchData.events}
+              homeTeamName={matchData.homeTeamName}
+              awayTeamName={matchData.awayTeamName}
+              homeTeamColor={matchData.homeTeamColor}
+              awayTeamColor={matchData.awayTeamColor}
+              halfTimeMinute={matchData.events.find(e => e.type === 'Half Time')?.time || 2500}
+              filters={filters}
+            />
           </div>
         </div>
 
