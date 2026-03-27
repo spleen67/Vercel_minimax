@@ -29,6 +29,8 @@ import {
   Printer,
   Download,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Shield,
   Zap,
 } from 'lucide-react';
@@ -767,18 +769,29 @@ const AdvantageAnalysis = ({ data }: { data: MatchData }) => {
   const h1Advantages = advantages.filter((a) => getHalf(a.time) === 1);
   const h2Advantages = advantages.filter((a) => getHalf(a.time) === 2);
   
-  // Check for events within 30 seconds after advantage
-  const withEvent: string[] = [];
-  const withoutEvent: string[] = [];
+  // Types d'événements de score
+  const scoreTypes = ['Penalty Try', 'Penalty Kick', 'Drop Goal', 'Try', 'Conversion'];
+  
+  // Catégories d'avantages
+  const advantagePlusPlus: string[] = []; // Score dans les 30s
+  const advantagePlus: string[] = [];     // Pas d'événement dans les 30s
+  const advantageMinus: string[] = [];     // Événement non-score dans les 30s
   
   advantages.forEach((adv) => {
     const subsequentEvents = data.events.filter(
       (e) => e.time > adv.time && e.time <= adv.time + 30 && e.type !== 'Advantage'
     );
-    if (subsequentEvents.length > 0) {
-      withEvent.push(adv.id);
+    
+    // Vérifier si un des événements est un score
+    const scoreEvent = subsequentEvents.find((e) => scoreTypes.includes(e.type));
+    const hasNonScoreEvent = subsequentEvents.length > 0;
+    
+    if (scoreEvent) {
+      advantagePlusPlus.push(adv.id);
+    } else if (hasNonScoreEvent) {
+      advantageMinus.push(adv.id);
     } else {
-      withoutEvent.push(adv.id);
+      advantagePlus.push(adv.id);
     }
   });
 
@@ -789,45 +802,75 @@ const AdvantageAnalysis = ({ data }: { data: MatchData }) => {
         Analyse des avantages
       </h3>
       
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Ligne 1: Total et répartition par mi-temps */}
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-slate-700/50 rounded-lg p-4 text-center">
           <p className="text-3xl font-bold text-slate-100">{advantages.length}</p>
           <p className="text-xs text-slate-400 mt-1">Total avantages</p>
         </div>
         
-        <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
           <p className="text-3xl font-bold text-blue-400">{h1Advantages.length}</p>
           <p className="text-xs text-slate-400 mt-1">1ère Mi-temps</p>
         </div>
         
-        <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
           <p className="text-3xl font-bold text-green-400">{h2Advantages.length}</p>
           <p className="text-xs text-slate-400 mt-1">2ème Mi-temps</p>
         </div>
-        
-        <div className="bg-slate-700/50 rounded-lg p-4 text-center">
-          <p className="text-3xl font-bold text-yellow-400">
-            {advantages.length > 0 ? Math.round((withEvent.length / advantages.length) * 100) : 0}%
-          </p>
-          <p className="text-xs text-slate-400 mt-1">Conversion</p>
-        </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+      {/* Ligne 2: Les 3 catégories d'avantages */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        {/* Advantage++ : Score dans les 30s */}
+        <div className="bg-emerald-500/10 border border-emerald-500/40 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-medium text-green-400">Avec événement &lt; 30s</span>
+            <TrendingUp className="w-5 h-5 text-emerald-400" />
+            <span className="text-sm font-bold text-emerald-400">Advantage++</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{withEvent.length}</p>
+          <p className="text-2xl font-bold text-slate-100">{advantagePlusPlus.length}</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Score généré &lt; 30s
+            {advantages.length > 0 && (
+              <span className="ml-2 text-emerald-400">
+                ({Math.round((advantagePlusPlus.length / advantages.length) * 100)}%)
+              </span>
+            )}
+          </p>
         </div>
         
-        <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+        {/* Advantage+ : Pas d'événement dans les 30s */}
+        <div className="bg-slate-600/30 border border-slate-500/40 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <XCircle className="w-4 h-4 text-slate-400" />
-            <span className="text-sm font-medium text-slate-400">Sans événement &gt; 30s</span>
+            <Minus className="w-5 h-5 text-slate-400" />
+            <span className="text-sm font-bold text-slate-400">Advantage+</span>
           </div>
-          <p className="text-2xl font-bold text-slate-100">{withoutEvent.length}</p>
+          <p className="text-2xl font-bold text-slate-100">{advantagePlus.length}</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Aucun événement &gt; 30s
+            {advantages.length > 0 && (
+              <span className="ml-2 text-slate-400">
+                ({Math.round((advantagePlus.length / advantages.length) * 100)}%)
+              </span>
+            )}
+          </p>
+        </div>
+        
+        {/* Advantage- : Événement non-score dans les 30s */}
+        <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingDown className="w-5 h-5 text-amber-400" />
+            <span className="text-sm font-bold text-amber-400">Advantage-</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-100">{advantageMinus.length}</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Événement non-score &lt; 30s
+            {advantages.length > 0 && (
+              <span className="ml-2 text-amber-400">
+                ({Math.round((advantageMinus.length / advantages.length) * 100)}%)
+              </span>
+            )}
+          </p>
         </div>
       </div>
     </div>
